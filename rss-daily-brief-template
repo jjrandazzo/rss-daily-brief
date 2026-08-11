@@ -1,0 +1,80 @@
+import feedparser
+import anthropic
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timezone, timedelta
+import socket
+socket.setdefaulttimeout(30)
+
+API_KEY = "INSERT AI API KEY HERE - KEEP QUOTATION MARKS"
+EMAIL_ADDRESS = "EMAIL ADDRESS YOU WANT IT SENT TO - KEEP QUOTATION MARKS"
+EMAIL_PASSWORD = "EMAIL APP PASSWORD HERE - KEEP QUOTATION MARKS"
+EMAIL_TO = "EMAIL ADDRESS YOU WANT IT SENT TO - KEEP QUOTATION MARKS"
+
+def cyber_brief(request):
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+# Find RSS feed URLs at feedspot.com or search "[website name] RSS feed"
+# Test your feeds first using the test script before adding them here
+    feeds = [
+        "INSERT RSS FEED URL HERE",
+        "INSERT RSS FEED URL HERE",
+        "INSERT RSS FEED URL HERE AND HOWEVER MANY YOU WANT BELOW CONTINUING IN THIS FORMAT",
+            ]
+
+    all_articles = []
+    for url in feeds:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    published = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                    if published >= cutoff:
+                        title = entry.get("title", "No Title")
+                        link = entry.get("link", "No Link")
+                        all_articles.append(f"- {title}: {link}")
+        except Exception as e:
+            print(f"Skipping feed {url}: {e}")
+            continue
+
+    article_text = "\n".join(all_articles)
+# PROMPT TIPS: Tell Claude its role, what topics to include, 
+# what to exclude, and how to format the output.
+# Example: "You are a [role]. Summarize only articles about 
+# [topic]. Ignore [exclusions]. Format as [format]."
+    prompt = f"""INSERT YOUR PROMPT TO YOUR AI AGENT HERE. BE SPECIFIC ON WHAT YOU WANT IT TO DO. SET CONTEXT, GIVE IT A ROLE, GIVE IT DESIRED OUTCOME"""
+
+    client = anthropic.Anthropic(api_key=API_KEY)
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    brief = message.content[0].text
+
+    html = f"""
+<html>
+<body style="font-family: Arial, sans-serif; max-width: 800px; margin: auto;">
+    <div style="text-align: center; padding: 20px;">
+        <img src="INSERT GOOGLE DRIVE DIRECT LINK TO YOUR LOGO HERE" width="120" height="120"/>
+        <h2 style="color: #1a2a4a;">INSERT YOUR BRIEF NAME HERE</h2>
+    </div>
+    <hr style="border-color: #1a2a4a;">
+    <div style="padding: 20px; white-space: pre-wrap;">{brief}</div>
+    <hr style="border-color: #1a2a4a;">
+    <p style="text-align: center; color: gray; font-size: 12px;">Generated {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
+</body>
+</html>"""
+
+    msg = MIMEMultipart()
+    msg["From"] = EMAIL_ADDRESS
+    msg["To"] = EMAIL_TO
+    msg["Subject"] = f"WHATEVER YOU WANT THE TITLE OF YOUR EMAIL TO BE"
+    msg.attach(MIMEText(html, "html"))
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_ADDRESS, EMAIL_TO, msg.as_string())
+
+    return "Brief sent successfully!", 200
